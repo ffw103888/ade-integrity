@@ -61,3 +61,26 @@ def test_effect_gate_and_confidence_level_are_honest():
     for kwargs in ({"min_n": 6.5}, {"min_effect": float("nan")}, {"min_effect": True}):
         with pytest.raises(ValueError):
             judge_paired(deltas, **kwargs)
+
+
+def test_underflow_abstains_without_division_by_zero():
+    result = judge_paired([0, 4e-162, 0, 4e-162, 0, 4e-162])
+    assert result["verdict"] == "abstain"
+    assert result["reason"] == "numeric_underflow"
+    assert "p_value" not in result
+
+
+@pytest.mark.parametrize("method", [holm, bh])
+def test_one_shot_pvalues_match_complete_list(method):
+    values = [.04, .01, .03]
+    assert method(iter(values)) == method(values)
+    assert method(p for p in values) == method(values)
+    for bad in ([True], ["0.01"], [float("inf")]):
+        with pytest.raises(ValueError):
+            method(iter(bad))
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_canonical_json_rejects_nonfinite_numbers(value):
+    with pytest.raises(ValueError):
+        canonical_json({"nested": [value]})

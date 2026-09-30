@@ -5,7 +5,7 @@ from pathlib import Path
 
 def canonical_json(value):
     return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode()
 
 
@@ -96,7 +96,13 @@ def judge_paired(deltas, min_n=6, alpha=0.05, min_effect=0.0):
         return {"verdict": "abstain", "reason": "numeric_overflow", "n": n}
     if var == 0:
         return {"verdict": "abstain", "reason": "zero_variance", "n": n, "mean": mean}
-    t = mean / math.sqrt(var / n)
+    se_squared = var / n
+    if se_squared == 0:
+        return {"verdict": "abstain", "reason": "numeric_underflow", "n": n, "mean": mean}
+    se = math.sqrt(se_squared)
+    t = mean / se
+    if not math.isfinite(t):
+        return {"verdict": "abstain", "reason": "numeric_overflow", "n": n}
     df = n - 1
     p = _tpvalue(abs(t), df)
     verdict = (
@@ -107,8 +113,9 @@ def judge_paired(deltas, min_n=6, alpha=0.05, min_effect=0.0):
         else "abstain"
     )
     crit = _tinverse(1 - alpha / 2, df)
-    se = math.sqrt(var / n)
     interval = [mean - crit * se, mean + crit * se]
+    if any(not math.isfinite(x) for x in interval):
+        return {"verdict": "abstain", "reason": "numeric_overflow", "n": n}
     return {
         "verdict": verdict,
         "reason": None if verdict != "abstain" else "below_min_effect" if p < alpha else "not_significant",
@@ -203,11 +210,18 @@ def verify_receipt(
     return bool(verifier and verifier(receipt))
 
 
-def holm(pvalues, alpha=0.05):
-    if not 0 < alpha < 1 or any(
-        not math.isfinite(float(p)) or not 0 <= float(p) <= 1 for p in pvalues
+def _validated_pvalues(pvalues, alpha):
+    values = list(pvalues)
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not 0 < alpha < 1 or any(
+        isinstance(p, bool) or not isinstance(p, (int, float))
+        or not math.isfinite(p) or not 0 <= p <= 1 for p in values
     ):
         raise ValueError("invalid p-values or alpha")
+    return values
+
+
+def holm(pvalues, alpha=0.05):
+    pvalues = _validated_pvalues(pvalues, alpha)
     ordered = sorted(enumerate(pvalues), key=lambda x: x[1])
     out = {}
     passed = True
@@ -218,10 +232,7 @@ def holm(pvalues, alpha=0.05):
 
 
 def bh(pvalues, alpha=0.05):
-    if not 0 < alpha < 1 or any(
-        not math.isfinite(float(p)) or not 0 <= float(p) <= 1 for p in pvalues
-    ):
-        raise ValueError("invalid p-values or alpha")
+    pvalues = _validated_pvalues(pvalues, alpha)
     ordered = sorted(enumerate(pvalues), key=lambda x: x[1])
     k = max(
         (

@@ -4,7 +4,7 @@ Portable standard-library checks for canonical JSON seals, chained ledger rows,
 paired result abstention, and external receipt structure. It does not import ADE,
 create signatures, or establish independent human/model confirmation.
 
-MIT licensed. Version 0.1.0. Install the wheel from the GitHub release or build from
+MIT licensed. Version 0.1.1. Install the wheel from the GitHub release or build from
 this directory with `python -m pip install .`. There is no PyPI upload.
 
 Run `python -m pip install pytest scipy` and `python -m pytest tests` to check a
@@ -33,3 +33,7 @@ an application-supplied signature verifier; structural fields alone never pass.
 
 The independent implementation is numerically cross-checked against SciPy in
 `tests/ci_crosscheck.py`. SciPy is a test dependency only.
+
+Version 0.1.1 fixes one-shot p-value iterators and safely abstains when the standard
+error underflows. Canonical JSON rejects NaN and infinities. These cases were found
+by a separate GPT cloud engineering audit of 0.1.0; it was not a scientific replication.
